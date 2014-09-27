@@ -6,6 +6,11 @@
 #include "leds.h" 
 #include "main.h" 
 #include "dac_lowlevel.h" 
+#include "midi_lowlevel.h"
+
+/* mmmidi includes */
+#include "mm_midimsgbuilder.h"
+#include "mm_midirouter_standard.h" 
 
 /* mm_dsp includes */
 #include "mm_bus.h"
@@ -16,19 +21,51 @@
 #include "mm_wavtab.h"
 #include "mm_sigconst.h"
 
-#define NUM_SAMPLE_PLAYER_SIG_PROCS 3 
+#define MIDI_BOTTOM_NOTE 24
+#define MIDI_TOP_NOTE    96 
+#define MIDI_NUM_NOTES   (MIDI_TOP_NOTE - MIDI_BOTTOM_NOTE)
 
 extern uint16_t *curDMAData;
+
 extern MMSample GrandPianoFileDataStart;
 extern MMSample GrandPianoFileDataEnd;
 
-MMSamplePlayerSigProc *spsps[NUM_SAMPLE_PLAYER_SIG_PROCS];
-float spNotes[] = {49.,53.,56.};
+static MIDIMsgBuilder_State_t lastState;
+static MIDIMsgBuilder midiMsgBuilder;
+static MIDI_Router_Standard midiRouter;
+
+MMSamplePlayerSigProc *spsps[MIDI_NUM_NOTES];
+
+void MIDI_note_on_do(void *data, MIDIMsg *msg)
+{
+    if ((msg->data[1] < MIDI_TOP_NOTE) && (msg->data[1] >= MIDI_BOTTOM_NOTE)) {
+        MMSamplePlayerSigProc *sp = 
+            ((MMSamplePlayerSigProc**)data)[msg->data[1] - MIDI_BOTTOM_NOTE];
+        ((MMSigProc*)sp)->state = MMSigProc_State_PLAYING;
+        ((MMSamplePlayerSigProc*)sp)->index = 0;
+        ((MMSamplePlayerSigProc*)sp)->rate = pow(2.,
+            ((msg->data[1] - 59) / 12.));
+    }
+    MIDIMsg_free(msg);
+}
+
+void MIDI_note_off_do(void *data, MIDIMsg *msg)
+{
+    if ((msg->data[1] < MIDI_TOP_NOTE) && (msg->data[1] >= MIDI_BOTTOM_NOTE)) {
+        MMSamplePlayerSigProc *sp = 
+            ((MMSamplePlayerSigProc**)data)[msg->data[1] - MIDI_BOTTOM_NOTE];
+        ((MMSigProc*)sp)->state = MMSigProc_State_DONE;
+    }
+    MIDIMsg_free(msg);
+}
 
 int main(void)
 {
     MMSample *sampleFileDataStart = &GrandPianoFileDataStart;
     MMSample *sampleFileDataEnd   = &GrandPianoFileDataEnd;
+    size_t i;
+
+
     /* Enable LEDs so we can toggle them */
     LEDs_Init();
 
@@ -67,21 +104,30 @@ int main(void)
     samples.data = sampleFileDataStart;
     samples.length = sampleFileDataEnd - sampleFileDataStart;
 
-    /* make a samplePlayerSigProc */
-    size_t i;
-    for (i = 0; i < NUM_SAMPLE_PLAYER_SIG_PROCS; i++) {
+    /* Enable MIDI hardware */
+    MIDI_low_level_setup();
+
+    /* Initialize MIDI Message builder */
+    MIDIMsgBuilder_init(&midiMsgBuilder);
+
+    /* set up the MIDI router to trigger samples */
+    MIDI_Router_Standard_init(&midiRouter);
+    for (i = 0; i < MIDI_NUM_NOTES; i++) {
         spsps[i] = MMSamplePlayerSigProc_new();
         MMSamplePlayerSigProc_init(spsps[i]);
         spsps[i]->samples = &samples;
-        spsps[i]->rate = pow(2,(spNotes[i] - 59)/12.0);
         spsps[i]->parent = &samplePlayer;
         spsps[i]->loop = 1;
+        ((MMSigProc*)spsps[i])->state = MMSigProc_State_DONE;
         /* insert in signal chain */
         MMSigProc_insertAfter(&samplePlayer.placeHolder, spsps[i]);
+        MIDI_Router_addCB(&midiRouter.router, MIDIMSG_NOTE_ON, 1, MIDI_note_on_do, spsps);
+        MIDI_Router_addCB(&midiRouter.router, MIDIMSG_NOTE_OFF, 1, MIDI_note_off_do, spsps);
     }
 
     while (1) {
         while (curDMAData == NULL);/* wait for request to fill with data */
+        MIDI_process_buffer(); /* process MIDI at most every audio block */
         size_t numIters = DAC_DMA_BUF_SIZE;
         while (numIters--) {
             MMSigProc_tick(&sigChain);
@@ -91,7 +137,22 @@ int main(void)
     }
 }
 
+void do_stuff_with_msg(MIDIMsg *msg)
+{
+    MIDI_Router_handleMsg(&midiRouter.router, msg);
+}
+
 void MIDI_process_byte(char byte)
 {
-    return; /* do nothing for now */
+    switch (MIDIMsgBuilder_update(&midiMsgBuilder,byte)) {
+        case MIDIMsgBuilder_State_WAIT_STATUS:
+            break;
+        case MIDIMsgBuilder_State_WAIT_DATA:
+            break;
+        case MIDIMsgBuilder_State_COMPLETE:
+            do_stuff_with_msg(midiMsgBuilder.msg);
+            MIDIMsgBuilder_init(&midiMsgBuilder); /* reset builder */
+            break;
+    }
+    lastState = midiMsgBuilder.state;
 }

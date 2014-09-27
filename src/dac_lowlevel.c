@@ -59,7 +59,7 @@ void DAC_Setup(void)
     DMA_InitStruct.DMA_PeripheralDataSize = DMA_PeripheralDataSize_HalfWord;
     DMA_InitStruct.DMA_MemoryDataSize = DMA_MemoryDataSize_HalfWord;
     DMA_InitStruct.DMA_Mode = DMA_Mode_Circular;
-    DMA_InitStruct.DMA_Priority = DMA_Priority_High;
+    DMA_InitStruct.DMA_Priority = DMA_Priority_VeryHigh;
     DMA_InitStruct.DMA_FIFOMode = DMA_FIFOMode_Disable;
     /* DMA_FIFOThreshold ... N/A */
     DMA_InitStruct.DMA_MemoryBurst = DMA_MemoryBurst_Single;

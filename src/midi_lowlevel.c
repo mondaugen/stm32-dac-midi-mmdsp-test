@@ -107,3 +107,23 @@ void MIDI_process_buffer(void)
         MIDIlastIndex = (MIDIlastIndex + 1) % MIDI_BUF_SIZE; 
     }
 }
+
+void DMA1_Stream0_IRQHandler (void)
+{
+    if (DMA_GetITStatus(DMA1_Stream0, DMA_IT_TCIF0)
+            && DMA_GetFlagStatus(DMA1_Stream0, DMA_FLAG_TCIF0)) {
+        LEDs_greenToggle();
+        DMA_ClearITPendingBit(DMA1_Stream0, DMA_IT_TCIF0);
+        DMA_ClearFlag(DMA1_Stream0, DMA_FLAG_TCIF0);
+    }
+    NVIC_ClearPendingIRQ(DMA1_Stream0_IRQn);
+}
+
+void TIM2_IRQHandler(void)
+{
+    NVIC_ClearPendingIRQ(TIM2_IRQn);
+    if (TIM_GetITStatus(TIM2, TIM_IT_Update)) {
+        MIDI_TIMER_INTERRUPT();
+        TIM_ClearITPendingBit(TIM2, TIM_IT_Update);
+    }
+}
