@@ -20,6 +20,7 @@
 #include "mm_sigproc.h"
 #include "mm_wavtab.h"
 #include "mm_sigconst.h"
+#include "wavetables.h" 
 
 #define MIDI_BOTTOM_NOTE 24
 #define MIDI_TOP_NOTE    96 
@@ -27,14 +28,16 @@
 
 extern uint16_t *curDMAData;
 
-extern MMSample GrandPianoFileDataStart;
-extern MMSample GrandPianoFileDataEnd;
+//extern MMSample GrandPianoFileDataStart;
+//extern MMSample GrandPianoFileDataEnd;
 
 static MIDIMsgBuilder_State_t lastState;
 static MIDIMsgBuilder midiMsgBuilder;
 static MIDI_Router_Standard midiRouter;
 
 MMSamplePlayerSigProc *spsps[MIDI_NUM_NOTES];
+
+MMSample waveTableMidiNum = 59;
 
 void MIDI_note_on_do(void *data, MIDIMsg *msg)
 {
@@ -44,7 +47,7 @@ void MIDI_note_on_do(void *data, MIDIMsg *msg)
         ((MMSigProc*)sp)->state = MMSigProc_State_PLAYING;
         ((MMSamplePlayerSigProc*)sp)->index = 0;
         ((MMSamplePlayerSigProc*)sp)->rate = pow(2.,
-            ((msg->data[1] - 59) / 12.));
+            ((msg->data[1] - waveTableMidiNum) / 12.));
     }
     MIDIMsg_free(msg);
 }
@@ -61,8 +64,8 @@ void MIDI_note_off_do(void *data, MIDIMsg *msg)
 
 int main(void)
 {
-    MMSample *sampleFileDataStart = &GrandPianoFileDataStart;
-    MMSample *sampleFileDataEnd   = &GrandPianoFileDataEnd;
+    MMSample *sampleFileDataStart = WaveTable;
+    MMSample *sampleFileDataEnd   = WaveTable + WAVTABLE_LENGTH_SAMPLES;
     size_t i;
 
 
@@ -98,6 +101,10 @@ int main(void)
 
     /* put sig constant at the top of the sig chain */
     MMSigProc_insertBefore(&samplePlayer.placeHolder,&sigConst);
+
+    /* initialize wavetables */
+    waveTableMidiNum = WaveTable_midiNumber();
+    WaveTable_init();
 
     /* Give access to samples of sound as wave table */
     MMWavTab samples;
