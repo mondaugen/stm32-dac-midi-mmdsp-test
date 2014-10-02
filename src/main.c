@@ -121,9 +121,9 @@ int main(void)
         ((MMSigProc*)spsps[i])->state = MMSigProc_State_DONE;
         /* insert in signal chain */
         MMSigProc_insertAfter(&samplePlayer.placeHolder, spsps[i]);
-        MIDI_Router_addCB(&midiRouter.router, MIDIMSG_NOTE_ON, 1, MIDI_note_on_do, spsps);
-        MIDI_Router_addCB(&midiRouter.router, MIDIMSG_NOTE_OFF, 1, MIDI_note_off_do, spsps);
     }
+    MIDI_Router_addCB(&midiRouter.router, MIDIMSG_NOTE_ON, 1, MIDI_note_on_do, spsps);
+    MIDI_Router_addCB(&midiRouter.router, MIDIMSG_NOTE_OFF, 1, MIDI_note_off_do, spsps);
 
     while (1) {
         while (curDMAData == NULL);/* wait for request to fill with data */
